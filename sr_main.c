@@ -295,7 +295,7 @@ int sr_verify_routing_table(struct sr_instance* sr)
         if_walker = sr->if_list;
         while(if_walker)
         {
-            if( strncmp(if_walker->name,rt_walker->interface,sr_IFACE_NAMELEN)
+            if( strncmp(if_walker->name,rt_walker->interface,SR_IFACE_NAMELEN)
                     == 0)
             { break; }
             if_walker = if_walker->next;

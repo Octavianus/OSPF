@@ -102,7 +102,7 @@ void sr_add_rt_entry(struct sr_instance* sr, struct in_addr dest,
         sr->routing_table->dest = dest;
         sr->routing_table->gw   = gw;
         sr->routing_table->mask = mask;
-        strncpy(sr->routing_table->interface,if_name,sr_IFACE_NAMELEN);
+        strncpy(sr->routing_table->interface,if_name,SR_IFACE_NAMELEN);
 
         return;
     }
@@ -120,7 +120,7 @@ void sr_add_rt_entry(struct sr_instance* sr, struct in_addr dest,
     rt_walker->dest = dest;
     rt_walker->gw   = gw;
     rt_walker->mask = mask;
-    strncpy(rt_walker->interface,if_name,sr_IFACE_NAMELEN);
+    strncpy(rt_walker->interface,if_name,SR_IFACE_NAMELEN);
 
 } /* -- sr_add_entry -- */
 

@@ -649,8 +649,8 @@ void sr_IPforward(struct sr_instance* sr,
         unsigned int len,
         char* interface)
 {
-	char* interface_temp = (char *)malloc(sizeof(char) * sr_IFACE_NAMELEN);
-	strncpy(interface_temp, interface, sr_IFACE_NAMELEN);   // copy of the input interface;
+	char* interface_temp = (char *)malloc(sizeof(char) * SR_IFACE_NAMELEN);
+	strncpy(interface_temp, interface, SR_IFACE_NAMELEN);   // copy of the input interface;
 	
     // use dest_IP address search routing table for next hop
     struct ip *ip_hdr = NULL;
