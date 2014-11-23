@@ -15,10 +15,19 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <netinet/in.h>
 
+// A list of all the neighbors.
+struct neighbor_list
+{
+    struct in_addr neighbor_id;
+    uint8_t alive; // in seconds
+    struct neighbor_list* next;
+}__attribute__ ((packed));
 
 /* -- declaration of main thread function for pwospf subsystem --- */
 static void* pwospf_run_thread(void* arg);
+void add_neighbor(neighbor_list* nbr_head, neighbor_list* new_neighbor);
 
 /*---------------------------------------------------------------------
  * Method: pwospf_init(..)
@@ -106,12 +115,16 @@ void* pwospf_run_thread(void* arg)
 void handle_hello_packets(struct sr_instance* sr, struct sr_if* interface, uint8_t* packet, unsigned int length)
 {
 
-	// Contruct the header.
-	struct ip* iP_Hdr = ((ip*)(packet + sizeof(sr_ethernet_hdr)));
-    struct ospfv2_hdr* ospfv2_Hdr = ((struct ospfv2_hdr*)(packet + sizeof(sr_ethernet_hdr) + sizeof(ip)));
-    struct ospfv2_hello_hdr* ospfv2_Hello_Hdr = ((struct ospfv2_hello_hdr*)(packet + sizeof(sr_ethernet_hdr) + sizeof(ip) + sizeof(ospfv2_hdr)));
 
+    bool exit_neighbor = true;
+    uint16_t checksum = 0;
     struct in_addr neighbor_id;
+    // Contruct the header.
+
+	struct ip * iP_Hdr = ((ip *)(packet + sizeof(sr_ethernet_hdr)));
+	struct ospfv2_hdr* ospfv2_Hdr = ((struct ospfv2_hdr *)(packet + sizeof(sr_ethernet_hdr) + sizeof(ip)));
+    struct ospfv2_hello_hdr* ospfv2_Hello_Hdr = ((struct ospfv2_hello_hdr *)(packet + sizeof(sr_ethernet_hdr) + sizeof(ip) + sizeof(ospfv2_hdr)));
+
     neighbor_id.s_addr = ospfv2_Hdr->rid;
     struct in_addr net_mask;
     net_mask.s_addr = ospfv2_Hello_Hdr->nmask;
@@ -122,14 +135,20 @@ void handle_hello_packets(struct sr_instance* sr, struct sr_if* interface, uint8
 
     // Examine the checksum
     uint16_t rx_checksum = ospfv2_Hdr->csum;
-    ospfv2_Hdr->csum = 0;
-    uint16_t calc_checksum = calc_cksum(packet + sizeof(sr_ethernet_hdr) + sizeof(ip), sizeof(ospfv2_hdr) + sizeof(ospfv2_hello_hdr));
-    if (calc_checksum != rx_checksum)
+    uint8_t * hdr_checksum = ((uint8_t *)(packet + sizeof(sr_ethernet_hdr) + sizeof(ip)));
+    checksum = cal_ICMPcksum(hdr_checksum, sizeof(ospfv2_hello_hdr) + sizeof(ospfv2_hdr));
+    if (checksum != rx_checksum)
     {
         Debug("-> PWOSPF: HELLO Packet dropped, invalid checksum\n");
         return;
     }
-    ospfv2_Hdr->csum = rx_checksum;
+
+    // Examine the validation of the hello interval
+    if (ospfv2_Hello_Hdr->helloint != 5)
+    {
+        Debug("-> PWOSPF: HELLO Packet dropped, invalid hello interval\n");
+        return;
+    }
 
     // Examine the interface mask
     if (ospfv2_Hello_Hdr->nmask != interface->mask)
@@ -138,15 +157,7 @@ void handle_hello_packets(struct sr_instance* sr, struct sr_if* interface, uint8
         return;
     }
 
-    // Examine the validation of the hello interval
-    if (ospfv2_Hello_Hdr->helloint != htons(OSPF_DEFAULT_HELLOINT))
-    {
-        Debug("-> PWOSPF: HELLO Packet dropped, invalid hello interval\n");
-        return;
-    }
-
     // If it is already the neighbor of the interface
-    bool exit_neighbor = true;
     if (interface->neighbor_id != ospfv2_Hdr->rid)
     {
     	exit_neighbor = false;
@@ -155,7 +166,28 @@ void handle_hello_packets(struct sr_instance* sr, struct sr_if* interface, uint8
     interface->neighbor_ip = iP_Hdr->ip_src.s_addr;
 
     // give the header of the neighbor list and the neighbor id, and renew the neighbors' timestamp
-    refresh_neighbors_alive(first_neighbor, neighbor_id);
+    struct neighbor_list* ptr = nbr_head;
+    while(ptr != NULL)
+    {
+    	if (ptr->neighbor_id.s_addr == neighbor_id.s_addr)
+    	{
+    		Debug("-> PWOSPF: Refreshing the neighbor, [ID = %s] in the alive neighbors table\n", inet_ntoa(neighbor_id));
+    		ptr->alive = OSPF_NEIGHBOR_TIMEOUT;
+    		return;
+    	}
+
+    	ptr = ptr->next;
+    }
+
+    Debug("-> PWOSPF: Adding the neighbor, [ID = %s] to the alive neighbors table\n", inet_ntoa(neighbor_id));
+
+    // Create a new neighbor and add it to the list
+    struct neighbor_list* new_neighbor = ((neighbor_list*)(malloc(sizeof(neighbor_list))));
+    new_neighbor->neighbor_id.s_addr = neighbor_id.s_addr;
+    new_neighbor->alive = OSPF_NEIGHBOR_TIMEOUT;
+    new_neighbor->next = NULL;
+
+    add_neighbor(nbr_head, new_neighbor);
 
     // send the lsu announcement to the internet of adding a new neighbor
     if (exit_neighbor == false)
