@@ -15,6 +15,16 @@
 /* forward declare */
 struct sr_instance;
 
+// A list of all the neighbors.
+struct neighbor_list
+{
+    uint8_t alive; // in seconds
+    struct in_addr neighbor_id;
+    struct neighbor_list* next;
+}__attribute__ ((packed));
+
+struct neighbor_list* nbr_head;
+
 struct pwospf_subsys
 {
     /* -- pwospf subsystem state variables here -- */
